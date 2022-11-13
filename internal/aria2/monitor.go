@@ -70,6 +70,8 @@ func (m *Monitor) Update() (bool, error) {
 	info, err := client.TellStatus(m.tsk.ID)
 	if err != nil {
 		m.retried++
+		log.Errorf("failed to get status of %s, retried %d times", m.tsk.ID, m.retried)
+		return false, nil
 	}
 	if m.retried > 5 {
 		return true, errors.Errorf("failed to get status of %s, retried %d times", m.tsk.ID, m.retried)
@@ -103,7 +105,14 @@ func (m *Monitor) Update() (bool, error) {
 		return true, errors.WithMessage(err, "failed to transfer file")
 	case "error":
 		return true, errors.Errorf("failed to download %s, error: %s", m.tsk.ID, info.ErrorMessage)
-	case "active", "waiting", "paused":
+	case "active":
+		m.tsk.SetStatus("aria2: " + info.Status)
+		if info.Seeder == "true" {
+			err := m.Complete()
+			return true, errors.WithMessage(err, "failed to transfer file")
+		}
+		return false, nil
+	case "waiting", "paused":
 		m.tsk.SetStatus("aria2: " + info.Status)
 		return false, nil
 	case "removed":
